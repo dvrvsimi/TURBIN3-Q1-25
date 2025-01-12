@@ -17,19 +17,16 @@ mod tests {
             use std::str::FromStr;
     use bs58;
     use std::io::{self, BufRead};
-    use borsh::BorshSerialize;
+    #[derive(BorshSerialize)]
+        struct CompleteArgs {
+            github: Vec<u8>,
+        }
 
 
     const RPC_URL: &str = "https://api.devnet.solana.com";
 
     // Import the generated program
-    use crate::programs::turbin3_prereq::{TurbinePrereqProgram,
-        UpdateArgs}; // unused imports
-
-    #[derive(BorshSerialize)]
-    struct CompleteArgs {
-        github: Vec<u8>,
-    }
+    use crate::programs::turbin3_prereq::{TurbinePrereqProgram, UpdateArgs};
 
    
 
@@ -102,52 +99,55 @@ mod tests {
     }
 
     #[test]
-    fn enroll() {
-         // Define the program ID
-        let program_id = Pubkey::from_str("ADcaide4vBtKuyZQqdU689YqEGZMCmS4tL35bdTv9wJa").unwrap();
 
-    
+    #[test]
+    fn enroll() {
+        // Define the program ID
+        let program_id = Pubkey::from_str("ADcaide4vBtKuyZQqdU689YqEGZMCmS4tL35bdTv9wJa").unwrap();
+        
         let rpc_client = RpcClient::new(RPC_URL);
         let signer = read_keypair_file("Turbin3-wallet.json").expect("Couldn't find wallet file");
-    
-        // Store the pubkey first
         let signer_pubkey = signer.pubkey();
         
-        // Now use the stored pubkey
+        // Generate PDA account
         let seeds = &[b"prereq", signer_pubkey.as_ref()];
         let (prereq, _bump) = Pubkey::find_program_address(seeds, &program_id);
-    
+        
+        // Create instruction data with github username
         let args = CompleteArgs {
             github: b"dvrvsimi".to_vec()
         };
         let instruction_data = args.try_to_vec().unwrap();
-    
-        let instruction = Instruction { // using Instruction from solana_program
-            program_id: program_id,
-            // defining the accounts
+        
+        // Create instruction with required accounts
+        let instruction = Instruction {
+            program_id,
             accounts: vec![
-                AccountMeta::new(signer_pubkey, true),
-                AccountMeta::new(prereq, false),
-                AccountMeta::new_readonly(system_program::id(), false),
+                AccountMeta::new(signer_pubkey, true),      // Signer
+                AccountMeta::new(prereq, false),            // PDA account
+                AccountMeta::new_readonly(system_program::id(), false), // System program
             ],
             data: instruction_data,
         };
-    
+        
+        // Get latest blockhash for transaction
         let blockhash = rpc_client
             .get_latest_blockhash()
             .expect("Failed to get recent blockhash");
-    
+        
+        // Create and sign transaction
         let transaction = Transaction::new_signed_with_payer(
             &[instruction],
             Some(&signer_pubkey),
             &[&signer],
             blockhash,
         );
-    
+        
+        // Send and confirm transaction
         let signature = rpc_client
             .send_and_confirm_transaction(&transaction)
             .expect("Failed to send transaction");
-    
+        
         println!(
             "Success! Check out your TX here: https://explorer.solana.com/tx/{}/?cluster=devnet",
             signature
